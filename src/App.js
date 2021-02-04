@@ -1,3 +1,4 @@
+import React from 'react'
 import SiteAdmin from './components/SiteAdmin'
 
 function App() {
