@@ -1,10 +1,11 @@
 import React from 'react'
-import SiteAdmin from './components/SiteAdmin'
+
+import Socket from "./containers/Socket";
 
 function App() {
   return (
     <div className="App">
-      <SiteAdmin/>
+      <Socket/>
     </div>
   );
 }
