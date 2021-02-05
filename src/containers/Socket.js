@@ -45,10 +45,13 @@ const Socket = () => {
                 ws.send(JSON.stringify({
                     "requestType" : "Command",
                     "uuid" : JSON.parse(evt.data).uuid,
-                    "message" : "ls /etc"
+                    "message" : "ls /home"
                 }))
                 ws.onmessage = (evt)=>{
-                    console.log(JSON.parse(evt.data))
+                    const rawData = JSON.parse(evt.data).result
+                    const data = rawData.substring(1,rawData.length-1)
+                    const fileList = data.split(",").map(line=>line.trim().replace(/\s{2,}/gi, ' ').split(" "))
+                    console.log(fileList)
                 }
             }
         }
