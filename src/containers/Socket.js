@@ -1,17 +1,23 @@
 import React, {useState} from 'react';
 
-
 const Socket = () => {
+    // 연결상태 체크
     const [connection, setConnection] = useState(false);
+    // 웹 소켓 Url
+    const [url, setUrl] = useState("")
 
+    // 사용자가 입력하는 5가지 값
     const [protocol, setProtocol] = useState("sftp");
     const [host, setHost] = useState("211.253.10.9");
     const [port, setPort] = useState("10021");
     const [user, setUser] = useState("root");
     const [password, setPassword] = useState("Netand141)");
 
+    // 웹 소켓 연결성공시 전달받는 uuid 값
     const [uuid, setUuid] = useState("")
-    const [url, setUrl] = useState("")
+
+    // 코멘드 명령 전송시 넘어오는 파일정보
+    const [filesInfo, setFilesInfo] = useState([]);
 
 
     //원격서버 연결하기
@@ -30,6 +36,7 @@ const Socket = () => {
 
             console.log('연결되었습니다.')
 
+            // 서버 연결을 위한 사용자 입력값 전송
             ws.send(JSON.stringify({
                 "requestType": "Connect",
                 "host": host,
@@ -37,21 +44,23 @@ const Socket = () => {
                 "password": password,
                 "port": port
             }))
+            // 넘겨받은 데이터
             ws.onmessage = (evt) => {
                 console.log('원격 서버와 연결되었습니다.')
                 console.log(JSON.parse(evt.data))
                 setUuid(JSON.parse(evt.data).uuid)
                 setConnection(true)
                 ws.send(JSON.stringify({
-                    "requestType" : "Command",
-                    "uuid" : JSON.parse(evt.data).uuid,
-                    "message" : "ls /home"
+                    "requestType": "Command",
+                    "uuid": JSON.parse(evt.data).uuid,
+                    "message": "ls /home"
                 }))
-                ws.onmessage = (evt)=>{
+                ws.onmessage = (evt) => {
                     const rawData = JSON.parse(evt.data).result
-                    const data = rawData.substring(1,rawData.length-1)
-                    const fileList = data.split(",").map(line=>line.trim().replace(/\s{2,}/gi, ' ').split(" "))
+                    const data = rawData.substring(1, rawData.length - 1)
+                    const fileList = data.split(",").map(line => line.trim().replace(/\s{2,}/gi, ' ').split(" "))
                     console.log(fileList)
+                    setFilesInfo(fileList)
                 }
             }
         }
@@ -106,7 +115,6 @@ const Socket = () => {
 
     return (
         <div style={{padding: "24px"}}>
-            {/* 웹 소켓 서버 연결 */}
             <h3>웹 소켓 서버 연결</h3>
             <select name="protocol" onChange={(e) => setProtocol(e.target.value)} placeholder="프로토콜">
                 <option value="sftp">SFTP</option>
@@ -125,11 +133,37 @@ const Socket = () => {
             {connection &&
             <div>
                 <h3>디렉토리 테이블</h3>
+                {filesInfo.length > 0 &&
+                <table>
+                    {/* 테이블 명 */}
+                    <thead>
+                    <tr>
+                        <th>파일명</th>
+                        <th>크기</th>
+                        <th>최종 수정</th>
+                        <th>권한</th>
+                        <th>소유자/그룹</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+
+                    {/*  라인들  */}
+                    {filesInfo.map((v, i) => {
+                        return (
+                            <tr key={i}>
+                                <td>{v[8]}</td>
+                                <td style={{textAlign: 'center'}}>{v[4]}</td>
+                                <td style={{textAlign: 'center'}}>{`${v[5]} ${v[6]} ${v[7]}`}</td>
+                                <td style={{textAlign: 'center'}}>{v[0]}</td>
+                                <td style={{textAlign: 'center'}}>{`${v[2]} / ${v[3]}`}</td>
+                            </tr>
+                        )
+                    })}
+                    </tbody>
+                </table>
+                }
             </div>
             }
-            {/*  */}
-            {/*<input type="file"/>*/}
-
         </div>
     );
 };
