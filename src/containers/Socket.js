@@ -1,4 +1,5 @@
-import React, {useState} from 'react';
+import React, {useState, useCallback} from 'react';
+
 
 const Socket = () => {
     // 연결상태 체크
@@ -12,16 +13,50 @@ const Socket = () => {
     const [port, setPort] = useState("10021");
     const [user, setUser] = useState("root");
     const [password, setPassword] = useState("Netand141)");
+    const [path, setPath] = useState(['/']);
 
     // 웹 소켓 연결성공시 전달받는 uuid 값
     const [uuid, setUuid] = useState("")
 
     // 코멘드 명령 전송시 넘어오는 파일정보
-    const [filesInfo, setFilesInfo] = useState([]);
+    const [files, setFiles] = useState([]);
 
+    //파일정보 가져오는 함수
+    const getFiles = (ws) => {
+        console.log('파일을 가져오는 중입니다...')
+        ws.onmessage = (evt) => {
+            const rawData = JSON.parse(evt.data).result
+            const data = rawData.substring(1, rawData.length - 1)
+            const fileList = data.split(",").map(line => line.trim().replace(/\s{2,}/gi, ' ').split(" "))
+            console.log(fileList)
+            let temp = []
+            fileList.forEach(item => {
+                temp.push({
+                    fileName: item[8],
+                    fileSize: item[4],
+                    fileType: item[0][0] === "d" ? "directory" : "file",
+                    lastModified: `${item[5]} ${item[6]} ${item[7]}`,
+                    permission: item[0],
+                    owner: item[2],
+                    group: item[3],
+                    links: item[1]
+                })
+            })
+            setFiles(temp)
+        }
+    }
+
+    // Command 전송 함수
+    const sendCommand = (ws, uuid, message) => {
+        ws.send(JSON.stringify({
+            "requestType": "Command",
+            "uuid": uuid,
+            "message": message
+        }))
+    }
 
     //원격서버 연결하기
-    const connectServer = () => {
+    const connectServer = useCallback(() => {
         if (protocol === "" || host === "" || port === "" || user === "" || password === "") {
             alert("입력하지 않은 값이 있습니다.")
             return
@@ -33,8 +68,7 @@ const Socket = () => {
         const serverUrl = `ws://${host}:8080/ws/${protocol}`
         const ws = new WebSocket(serverUrl)
         ws.onopen = (evt) => {
-
-            console.log('연결되었습니다.')
+            console.log('서버 연결중...')
 
             // 서버 연결을 위한 사용자 입력값 전송
             ws.send(JSON.stringify({
@@ -46,22 +80,13 @@ const Socket = () => {
             }))
             // 넘겨받은 데이터
             ws.onmessage = (evt) => {
-                console.log('원격 서버와 연결되었습니다.')
+                console.log('연결되었습니다.')
                 console.log(JSON.parse(evt.data))
                 setUuid(JSON.parse(evt.data).uuid)
                 setConnection(true)
-                ws.send(JSON.stringify({
-                    "requestType": "Command",
-                    "uuid": JSON.parse(evt.data).uuid,
-                    "message": "ls /home"
-                }))
-                ws.onmessage = (evt) => {
-                    const rawData = JSON.parse(evt.data).result
-                    const data = rawData.substring(1, rawData.length - 1)
-                    const fileList = data.split(",").map(line => line.trim().replace(/\s{2,}/gi, ' ').split(" "))
-                    console.log(fileList)
-                    setFilesInfo(fileList)
-                }
+                const uuid = JSON.parse(evt.data).uuid
+                sendCommand(ws, uuid, `ls ${path.join("")}`)
+                getFiles(ws)
             }
         }
         ws.onclose = (evt) => {
@@ -75,19 +100,17 @@ const Socket = () => {
             console.log(evt.data)
         }
         setUrl(serverUrl)
-    }
+    }, [protocol, host, user, password, port, connection, path])
 
     // 원격 서버 연결 해제하기
-    const disconnectServer = () => {
+    const disconnectServer = useCallback(() => {
         if (connection === false) {
             alert("연결된 서버가 없습니다.")
             return
         }
         const ws = new WebSocket(url)
-        if (ws.readyState !== 3) {
-            console.log('연결 해제 중...')
-        }
         ws.onopen = (evt) => {
+            console.log('서버 연결 해제중...')
             ws.send(JSON.stringify({
                 "requestType": "Disconnect",
                 "uuid": uuid
@@ -111,7 +134,38 @@ const Socket = () => {
             console.log('서버 연결이 종료되었습니다.')
             setConnection(false)
         }
-    }
+    }, [url, uuid, connection])
+
+    // 트리 이동
+    const moveTree = useCallback((item) => {
+        let nextPath = path
+        if (typeof item === 'string') {
+            if (path.length > 1) {
+                nextPath.pop()
+                const ws = new WebSocket(url)
+                ws.onopen = () => {
+                    sendCommand(ws, uuid, `ls ${nextPath.join("")}`)
+                    getFiles(ws)
+                }
+                setPath(nextPath)
+            } else {
+                alert("최상위 경로 입니다.")
+            }
+        } else {
+            if (item.fileType === 'directory') {
+
+                nextPath.push(`/${item.fileName}`)
+                const ws = new WebSocket(url)
+                ws.onopen = () => {
+                    sendCommand(ws, uuid, `ls ${nextPath.join("")}`)
+                    getFiles(ws)
+                }
+                setPath(nextPath)
+            }
+        }
+
+    }, [path, uuid, url])
+
 
     return (
         <div style={{padding: "24px"}}>
@@ -133,35 +187,37 @@ const Socket = () => {
             {connection &&
             <div>
                 <h3>디렉토리 테이블</h3>
-                {filesInfo.length > 0 &&
                 <table>
-                    {/* 테이블 명 */}
-                    <thead>
+                    <thead style={{marginBottom: "20px"}}>
                     <tr>
                         <th>파일명</th>
                         <th>크기</th>
+                        <th>링크 수</th>
+                        <th>파일 유형</th>
                         <th>최종 수정</th>
                         <th>권한</th>
                         <th>소유자/그룹</th>
                     </tr>
                     </thead>
                     <tbody>
-
-                    {/*  라인들  */}
-                    {filesInfo.map((v, i) => {
+                    <tr>
+                        <th onClick={() => moveTree('moveUp')} style={{textAlign: "left", color: 'red'}}>..</th>
+                    </tr>
+                    {files.map((item, i) => {
                         return (
-                            <tr key={i}>
-                                <td>{v[8]}</td>
-                                <td style={{textAlign: 'center'}}>{v[4]}</td>
-                                <td style={{textAlign: 'center'}}>{`${v[5]} ${v[6]} ${v[7]}`}</td>
-                                <td style={{textAlign: 'center'}}>{v[0]}</td>
-                                <td style={{textAlign: 'center'}}>{`${v[2]} / ${v[3]}`}</td>
+                            <tr key={i} onClick={() => moveTree(item)}>
+                                <th style={{textAlign: "left"}}>{item.fileName}</th>
+                                <th>{item.fileSize}</th>
+                                <th>{item.links}</th>
+                                <th>{item.fileType}</th>
+                                <th>{item.lastModified}</th>
+                                <th>{item.permission}</th>
+                                <th>{`${item.owner}/${item.group}`}</th>
                             </tr>
                         )
                     })}
                     </tbody>
                 </table>
-                }
             </div>
             }
         </div>
