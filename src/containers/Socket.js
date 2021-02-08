@@ -1,6 +1,6 @@
 import React, {useState, useCallback} from 'react';
 import Dropzone from "../components/Socket/Dropzone";
-// today to do => dropzone 으로 파일 업로드 구현 & 시간 남으면 folder tree 구조로 ui 변경하기
+// 시간 남으면 folder tree 구조로 ui 변경하기
 
 
 const Socket = () => {
